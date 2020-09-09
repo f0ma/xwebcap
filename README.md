@@ -38,8 +38,9 @@ kill -s SIGUSR1 [xwebcap pid]
 # Help
 
 ```
-usage: xwebcap.py [-h] [-p PROFILE] [-x XRES] [-y YRES] [-f FRAMERATE] [-i]
-                  [-m FFMPEG] [-o OUTPUT] -u URL [-d DURATION]
+usage: xwebcap.py [-h] [-p PROFILE] [-x XRES] [-y YRES] [-e DEPTH] [-s SCREEN]
+                  [-f FRAMERATE] [-i] [-m FFMPEG] [-o OUTPUT] [-w] -u URL
+                  [-d DURATION]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -48,6 +49,10 @@ optional arguments:
                         'jitsi']
   -x XRES, --xres XRES  Virtual screen X
   -y YRES, --yres YRES  Virtual screen Y
+  -e DEPTH, --depth DEPTH
+                        Virtual screen color depth
+  -s SCREEN, --screen SCREEN
+                        Virtual screen number
   -f FRAMERATE, --framerate FRAMERATE
                         Capture frame rate
   -i, --interactive     Run interactive python console with browser object
@@ -56,6 +61,7 @@ optional arguments:
                         Additional ffmpeg arguments
   -o OUTPUT, --output OUTPUT
                         Output file
+  -w, --windowed        Do not turn browser info fullscreen mode
   -u URL, --url URL     Target url
   -d DURATION, --duration DURATION
                         Capture duration in sec

@@ -32,8 +32,11 @@ cap_object = None
 class WebCap:
     def __init__(self, x_res = 1280,
                        y_res = 720,
+                       depth = 24,
                        framerate = 10,
+                       screen = 0,
                        ffmpeg_opts = '',
+                       windowed = False,
                        url = "https://example.com",
                        out_file = 'output.mkv',
                        duration = 0,
@@ -43,6 +46,7 @@ class WebCap:
         self.ffmpeg_process = None
         self.x_res = x_res
         self.y_res = y_res
+        self.depth = depth
         self.framerate = framerate
         self.ffmpeg_opts = ffmpeg_opts
         self.browser = None
@@ -51,6 +55,8 @@ class WebCap:
         self.exit = False
         self.interactive = interactive
         self.duration = duration
+        self.screen = screen
+        self.windowed = windowed
         self.start_time = None
         self.random_ids()
 
@@ -59,15 +65,16 @@ class WebCap:
         self.sink_id = 'webcap'+str(self.display_id)
 
     def start_xvfb(self):
-        pc = f"Xvfb -listen tcp :{self.display_id} -screen 1 {self.x_res}x{self.y_res}x24"
+        #TODO: why 1.111 scale requried?
+        pc = f"Xvfb -listen tcp :{self.display_id} -screen {self.screen} {round(self.x_res*1.111)}x{round(self.y_res*1.111)}x{self.depth}"
         print('Starting Xvfb server:\n', pc)
         self.xvfb_process = subprocess.Popen(pc, shell = True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, preexec_fn=os.setsid)
         time.sleep(1)
         if self.xvfb_process.returncode == None:
             print('Server started with id:', self.display_id)
         else:
-            self.random_ids()
-            self.start_xvfb()
+            #TODO: check if screen id in use
+            raise SystemError('Can\'t start Xvfb')
 
     def create_sink(self):
         pc = f'pactl load-module module-null-sink sink_name={self.sink_id}'
@@ -77,12 +84,11 @@ class WebCap:
 
     def start_browser(self):
         print('Starting browser')
-        os.environ["DISPLAY"] = f":{self.display_id}.1"
+        os.environ["DISPLAY"] = f":{self.display_id}.{self.screen}"
         fp = webdriver.FirefoxProfile()
         fp.set_preference("permissions.default.microphone", 1)
         fp.set_preference("permissions.default.camera", 1)
         self.browser = webdriver.Firefox(firefox_profile = fp)
-        self.browser.set_window_size(self.x_res, self.y_res)
         self.browser.maximize_window()
         print('Browser started')
 
@@ -91,8 +97,9 @@ class WebCap:
         print('Loading page', self.url)
         self.browser.get(self.url)
         time.sleep(2)
-        self.browser.fullscreen_window()
-        time.sleep(1)
+        if not self.windowed:
+            self.browser.fullscreen_window()
+            time.sleep(1)
 
     def on_capture(self):
         if self.interactive:
@@ -109,7 +116,7 @@ class WebCap:
         sinks = subprocess.check_output(['pacmd', 'list-sink-inputs']).decode()
         sinks = sinks.split('\n')
         index_re = re.compile(r"\s+index:\s+([0-9]+)")
-        pid_re = re.compile(r"\s+window.x11.display\s+=\s+\":([0-9]+)\.1\"")
+        pid_re = re.compile(r"\s+window.x11.display\s+=\s+\":([0-9]+)\.[0-9]\"")
         current_index = None
         current_display = None
         browser_sink_index = None
@@ -133,7 +140,9 @@ class WebCap:
 
     def start_capturing(self):
         print('Capturing into', self.out_file)
-        pc = f"ffmpeg -y -f x11grab -video_size {self.x_res}x{self.y_res} -framerate {self.framerate} -i 127.0.0.1:{self.display_id}.1 -f pulse -i {self.sink_id}.monitor {self.ffmpeg_opts} {self.out_file}"
+        wsz = self.browser.get_window_size()
+        print('Browser frame:', wsz)
+        pc = f"ffmpeg -y -f x11grab -video_size {wsz['width']}x{wsz['height']} -framerate {self.framerate} -i 127.0.0.1:{self.display_id}.{self.screen} -f pulse -i {self.sink_id}.monitor {self.ffmpeg_opts} {self.out_file}"
         print('Starting capturing:\n', pc)
         self.ffmpeg_process = subprocess.Popen(pc, shell = True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,  preexec_fn=os.setsid)
         print('Capturing started.')
@@ -239,10 +248,13 @@ if __name__ == '__main__':
     parser.add_argument('-p', "--profile", default='default', help="Web application profile to capture: "+str(list(profiles.keys())))
     parser.add_argument('-x', "--xres", type=int, default=1280, help="Virtual screen X")
     parser.add_argument('-y', "--yres", type=int, default=720, help="Virtual screen Y")
+    parser.add_argument('-e', "--depth", type=int, default=24, help="Virtual screen color depth")
+    parser.add_argument('-s', "--screen", type=int, default=0, help="Virtual screen number")
     parser.add_argument('-f', "--framerate", type=int, default=10, help="Capture frame rate")
     parser.add_argument('-i', "--interactive", action='store_true', default=False, help="Run interactive python console with browser object after starting capturing")
     parser.add_argument('-m', "--ffmpeg", default='', help="Additional ffmpeg arguments")
-    parser.add_argument('-o', "--output", default='webcap.'+datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')+'.mkv', help="Output file")
+    parser.add_argument('-o', "--output", default='webcap.'+datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')+'.mp4', help="Output file")
+    parser.add_argument('-w', "--windowed", action='store_true', default=False, help="Do not turn browser info fullscreen mode")
     parser.add_argument('-u', "--url", required=True, help="Target url")
     parser.add_argument('-d', "--duration", type=int, default=0, help="Capture duration in sec")
 
@@ -250,8 +262,11 @@ if __name__ == '__main__':
 
     cap_object = profiles[args.profile](x_res = args.xres,
                                         y_res = args.yres,
+                                        depth = args.depth,
                                         framerate = args.framerate,
+                                        screen = args.screen,
                                         ffmpeg_opts = args.ffmpeg,
+                                        windowed = args.windowed,
                                         url = args.url,
                                         out_file = args.output,
                                         duration = args.duration,
