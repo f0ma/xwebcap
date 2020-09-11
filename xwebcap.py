@@ -249,6 +249,7 @@ class JitsiCap(WebCap):
     def before_capture(self):
         print('Loading page', self.url)
         self.browser.get(self.url)
+        time.sleep(5)
 
         try:
             c = self.browser.find_element_by_name('displayName')
@@ -257,10 +258,11 @@ class JitsiCap(WebCap):
         except NoSuchElementException:
             pass
 
-        self.browser.find_element_by_xpath('/html/body').send_keys('w')
-        time.sleep(1)
         self.browser.find_element_by_xpath('/html/body').send_keys('s')
-        time.sleep(1)
+        time.sleep(2)
+        self.browser.find_element_by_xpath('/html/body').send_keys('w')
+        time.sleep(2)
+
 
 profiles['jitsi'] = JitsiCap
 
