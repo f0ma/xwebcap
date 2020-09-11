@@ -38,33 +38,38 @@ kill -s SIGUSR1 [xwebcap pid]
 # Help
 
 ```
-usage: xwebcap.py [-h] [-p PROFILE] [-x XRES] [-y YRES] [-e DEPTH] [-s SCREEN]
-                  [-f FRAMERATE] [-i] [-m FFMPEG] [-o OUTPUT] [-w] -u URL
-                  [-d DURATION]
+sage: xwebcap.py [-h] [-p PROFILE] [-x XRES] [-y YRES] [-e DEPTH] [-t EXTENT]
+                  [-s SCREEN] [-f FRAMERATE] [-i] [-m FFMPEG] [-o OUTPUT] [-w]
+                  -u URL [-l] [-d DURATION]
 
 optional arguments:
   -h, --help            show this help message and exit
   -p PROFILE, --profile PROFILE
                         Web application profile to capture: ['default',
                         'jitsi']
-  -x XRES, --xres XRES  Virtual screen X
-  -y YRES, --yres YRES  Virtual screen Y
+  -x XRES, --xres XRES  Virtual screen X, default 1280
+  -y YRES, --yres YRES  Virtual screen Y, default 740
   -e DEPTH, --depth DEPTH
-                        Virtual screen color depth
+                        Virtual screen color depth, default 24
+  -t EXTENT, --extent EXTENT
+                        Capturing extent ex. 400x500+100,100, default as
+                        screen
   -s SCREEN, --screen SCREEN
-                        Virtual screen number
+                        Virtual screen number, default 0
   -f FRAMERATE, --framerate FRAMERATE
-                        Capture frame rate
+                        Capture frame rate, default 10
   -i, --interactive     Run interactive python console with browser object
                         after starting capturing
   -m FFMPEG, --ffmpeg FFMPEG
                         Additional ffmpeg arguments
   -o OUTPUT, --output OUTPUT
                         Output file
-  -w, --windowed        Do not turn browser info fullscreen mode
+  -w, --windowed        Do not turn browser into fullscreen mode
   -u URL, --url URL     Target url
+  -l, --load            Loading page after capturing started
   -d DURATION, --duration DURATION
-                        Capture duration in sec
+                        Capture duration in sec, default no limit
+
 ```
 
 # How it works
@@ -79,21 +84,32 @@ optional arguments:
 # API
 
 ```python
-from xwebcap import WebCap
+import datetime
+import xwebcap
 
-class MyWebCap(WebCap):
+class MyWebCap(xwebcap.WebCap):
 
     #Called before recording started
-    def load_page(self):
-        super().load_page()
-        # works with selenium browser object as self.browser
+    def before_capture(self):
+        self.browser.get(self.url)
+        self.browser.fullscreen_window()
 
-    #Called when recording started
+    #Called after recording started
     def on_capture(self):
-        # works with selenium browser object as self.browser
-        pass
+        self.browser.find_element_by_xpath('/html/body').send_keys('w')
+        time.sleep(1)
 
 c = MyWebCap()
+
+#Optional:
+#install SIGINT and SIGTERM hook for graceful exit
+#install SIGUSR1 for new file capturing
+xwebcap.install_hooks(c)
+
 c.start()
+
+#call c.stop() for exit
+
+#
 
 ```
