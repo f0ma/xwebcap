@@ -249,6 +249,7 @@ class JitsiCap(WebCap):
     def before_capture(self):
         print('Loading page', self.url)
         self.browser.get(self.url)
+        time.sleep(5)
 
         print('Waiting for name input dialog')
 
@@ -265,12 +266,15 @@ class JitsiCap(WebCap):
 
         print('Name dialog passed going to record mode')
 
-        self.browser.find_element_by_xpath('/html/body').send_keys('w')
-        time.sleep(1)
         self.browser.find_element_by_xpath('/html/body').send_keys('s')
         time.sleep(1)
+
         self.browser.execute_script('$(".atlaskit-portal-container").hide();')
         time.sleep(1)
+
+        self.browser.find_element_by_xpath('/html/body').send_keys('w')
+        time.sleep(1)
+
 
 profiles['jitsi'] = JitsiCap
 
