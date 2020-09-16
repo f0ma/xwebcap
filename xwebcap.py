@@ -250,16 +250,26 @@ class JitsiCap(WebCap):
         print('Loading page', self.url)
         self.browser.get(self.url)
 
-        try:
-            c = self.browser.find_element_by_name('displayName')
-            c.send_keys('Record Bot')
-            c.send_keys(webdriver.common.keys.Keys.ENTER)
-        except NoSuchElementException:
-            pass
+        print('Waiting for name input dialog')
+
+        while True:
+            time.sleep(1)
+            try:
+                c = self.browser.find_element_by_name('displayName')
+                c.send_keys('Recorder')
+                c.send_keys(webdriver.common.keys.Keys.ENTER)
+                time.sleep(5)
+                break
+            except NoSuchElementException:
+                continue
+
+        print('Name dialog passed going to record mode')
 
         self.browser.find_element_by_xpath('/html/body').send_keys('w')
         time.sleep(1)
         self.browser.find_element_by_xpath('/html/body').send_keys('s')
+        time.sleep(1)
+        self.browser.execute_script('$(".atlaskit-portal-container").hide();')
         time.sleep(1)
 
 profiles['jitsi'] = JitsiCap
@@ -299,7 +309,7 @@ if __name__ == '__main__':
     parser.add_argument('-s', "--screen", type=int, default=0, help="Virtual screen number, default 0")
     parser.add_argument('-f', "--framerate", type=int, default=10, help="Capture frame rate, default 10")
     parser.add_argument('-i', "--interactive", action='store_true', default=False, help="Run interactive python console with browser object after starting capturing")
-    parser.add_argument('-m', "--ffmpeg", default='', help="Additional ffmpeg arguments")
+    parser.add_argument('-m', "--ffmpeg", type=str, default='', help="Additional ffmpeg arguments")
     parser.add_argument('-o', "--output", default='webcap.'+datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')+'.mp4', help="Output file")
     parser.add_argument('-w', "--windowed", action='store_true', default=False, help="Do not turn browser into fullscreen mode")
     parser.add_argument('-u', "--url", required=True, help="Target url")
