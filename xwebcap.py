@@ -30,6 +30,9 @@ if which('ffmpeg') is None:
 cap_object = None
 profiles = {}
 
+def mknewfilename(filedir, filetag):
+    return filedir+os.sep+filetag+'.'+datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')+'.mp4'
+
 class WebCap:
     def __init__(self, x_res = 1280,
                        y_res = 720,
@@ -42,6 +45,8 @@ class WebCap:
                        load = False,
                        url = "https://example.com",
                        out_file = 'output.mp4',
+                       filetag = '',
+                       out_dir = '',
                        duration = 0,
                        interactive = False):
         self.sink_module_id = None
@@ -58,6 +63,8 @@ class WebCap:
         self.browser = None
         self.url = url
         self.out_file = out_file
+        self.filetag = filetag
+        self.out_dir = out_dir
         self.exit = False
         self.interactive = interactive
         self.duration = duration
@@ -169,7 +176,13 @@ class WebCap:
             time.sleep(sink_timeout)
 
     def start_capturing(self):
-        print('Capturing into', self.out_file)
+        out_filename = ''
+        if self.out_file == '':
+            out_filename = mknewfilename(self.out_dir, self.filetag)
+        else:
+            out_filename = self.out_file
+
+        print('Capturing into', out_filename)
         wsz = self.browser.get_window_size()
         print('Browser frame:', wsz)
         extent = f"{wsz['width']}x{wsz['height']}"
@@ -178,7 +191,7 @@ class WebCap:
             extent, offset = self.extent.split('+')
             offset = '+'+offset
 
-        pc = f"ffmpeg -y -f x11grab -video_size {extent} -framerate {self.framerate} -draw_mouse 0 -i 127.0.0.1:{self.display_id}.{self.screen}{offset} -f pulse -i {self.sink_id}.monitor {self.ffmpeg_opts} {self.out_file}"
+        pc = f"ffmpeg -y -f x11grab -video_size {extent} -framerate {self.framerate} -draw_mouse 0 -i 127.0.0.1:{self.display_id}.{self.screen}{offset} -f pulse -i {self.sink_id}.monitor {self.ffmpeg_opts} {out_filename}"
         print('Starting capturing:\n', pc)
         self.ffmpeg_process = subprocess.Popen(pc, shell = True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,  preexec_fn=os.setsid)
         print('Capturing started.')
@@ -246,6 +259,9 @@ profiles['default'] = WebCap
 
 class JitsiCap(WebCap):
 
+    def set_mode(self, mode):
+        self.mode = mode
+
     def before_capture(self):
         print('Loading page', self.url)
         self.browser.get(self.url)
@@ -275,6 +291,23 @@ class JitsiCap(WebCap):
         self.browser.find_element_by_xpath('/html/body').send_keys('w')
         time.sleep(1)
 
+        self.browser.execute_script('$("#localVideoTileViewContainer").hide();')
+        time.sleep(1)
+
+
+    def capture_loop(self):
+        self.start_time = datetime.datetime.now()
+        print('Press Ctrl-C (send SIGINT) to exit, or send SIGUSR1 to creating new file. My pid is', os.getpid())
+        while not self.exit:
+            time.sleep(5)
+            if self.duration > 0 and (datetime.datetime.now() - self.start_time).seconds > self.duration:
+                break
+            if self.mode == 'always-grid':
+                self.browser.execute_script('if (!$(".toolbox-button:nth(7) .toolbox-icon").hasClass("toggled")) {$(".toolbox-button:nth(7)").click()};')
+            elif self.mode == 'always-presenter':
+                self.browser.execute_script('if ($(".toolbox-button:nth(7) .toolbox-icon").hasClass("toggled")) {$(".toolbox-button:nth(7)").click()};')
+            time.sleep(1)
+
 
 profiles['jitsi'] = JitsiCap
 
@@ -287,10 +320,6 @@ def exit_handler(sig, frame):
 def new_file_handler(sig, frame):
     global cap_object
     cap_object.stop_capturing()
-    filename, file_extension = os.path.splitext(cap_object.out_file)
-    if '.' in filename:
-        filename = filename.split('.')[0]
-    cap_object.out_file = filename+'.'+datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')+file_extension
     cap_object.start_capturing()
 
 
@@ -306,6 +335,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('-p', "--profile", default='default', help="Web application profile to capture: "+str(list(profiles.keys())))
+    parser.add_argument('-P', "--mode", default='', help="Mode for profile")
     parser.add_argument('-x', "--xres", type=int, default=1280, help="Virtual screen X, default 1280")
     parser.add_argument('-y', "--yres", type=int, default=720, help="Virtual screen Y, default 740")
     parser.add_argument('-e', "--depth", type=int, default=24, help="Virtual screen color depth, default 24")
@@ -314,13 +344,17 @@ if __name__ == '__main__':
     parser.add_argument('-f', "--framerate", type=int, default=10, help="Capture frame rate, default 10")
     parser.add_argument('-i', "--interactive", action='store_true', default=False, help="Run interactive python console with browser object after starting capturing")
     parser.add_argument('-m', "--ffmpeg", type=str, default='', help="Additional ffmpeg arguments")
-    parser.add_argument('-o', "--output", default='webcap.'+datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')+'.mp4', help="Output file")
+    parser.add_argument('-o', "--output", default='', help="Output file")
+    parser.add_argument('-O', "--outputdir", default='', help="Output directory")
+    parser.add_argument('-g', "--filetag", default='webcap', help="Output file")
     parser.add_argument('-w', "--windowed", action='store_true', default=False, help="Do not turn browser into fullscreen mode")
     parser.add_argument('-u', "--url", required=True, help="Target url")
     parser.add_argument('-l', "--load", action='store_true', default=False, help="Loading page after capturing started")
     parser.add_argument('-d', "--duration", type=int, default=0, help="Capture duration in sec, default no limit")
 
     args = parser.parse_args()
+
+
 
     cap_object = profiles[args.profile](x_res = args.xres,
                                         y_res = args.yres,
@@ -333,8 +367,12 @@ if __name__ == '__main__':
                                         load = args.load,
                                         url = args.url,
                                         out_file = args.output,
+                                        filetag = args.filetag,
+                                        out_dir = args.outputdir,
                                         duration = args.duration,
                                         interactive = args.interactive)
+
+    cap_object.set_mode(args.mode)
 
     install_hooks(cap_object)
 
